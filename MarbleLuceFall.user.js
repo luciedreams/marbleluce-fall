@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MarbleLuceFall
 // @namespace    http://tampermonkey.net/
-// @version      6.60
+// @version      6.61
 // @description  Layout overhaul for Marble Crownfall: 50+ colour themes, pages as windows over the game, autobid with risk protection and tile lists, unbid and extra ticket chips, quest alarm and euro prices in the shop, claim all dailies, new inventory and achievements pages, loadouts, adjustable reign read-outs with the toll on the tile, beverage bar, auto beverages on the throne, enhanced chat, hide any cosmetic, a music player with a movable bar, performance levels, how-to and what’s new.
 // @author       DreamingLucie
 // @match        *://*.marblecrownfall.com/*
@@ -2103,7 +2103,7 @@
                   { key: 'kingCornerAlpha', type: 'range', label: 'Visibility', min: 20, max: 100, step: 5, def: 100, unit: '%' },
               ] },
             { key: 'kingTray', label: 'Beverage buttons',
-              hint: 'Water and Lava left of the attack button, Milk and Acid right of it. As symbols they take the look of your theme; the name shows when you point at one.',
+              hint: 'Water, Lava and Bomb left of the attack button, Milk, Acid and Mystery right of it. As symbols they take the look of your theme; the name shows when you point at one.',
               subs: [
                   { key: 'drinkScale', type: 'range', label: 'Button size', min: 70, max: 140, step: 5, def: 100, unit: '%' },
                   { key: 'drinkIcons', type: 'choice', label: 'Show', def: 1, options: [[1, 'Symbols'], [0, 'Names']] },
@@ -2624,7 +2624,7 @@
     // a switch. Anything else found in storage is dropped rather than guessed at.
     settingDefaults.throneDrinkSet = [];
     settings.throneDrinkSet = Array.isArray(stored.throneDrinkSet)
-        ? stored.throneDrinkSet.filter(k => /^(water|lava|milk|acid)\|(small|medium|large)\|(gold|diamonds)$/.test(k)) : [];
+        ? stored.throneDrinkSet.filter(k => /^(water|lava|milk|acid|bomb|mystery)\|(small|medium|large)\|(gold|diamonds)$/.test(k)) : [];
     // The music player (6.22, section 11e): off unless switched on, and until then the game plays
     // its music its own way. The tracks taken out of the rotation are kept as the paths the game's
     // own manifest gives them; anything else found in storage is dropped rather than guessed at.
@@ -2926,7 +2926,7 @@
            measured at 11px/800 the widest label ("Water") is 30px, so a button is 42px and a pair
            90px. It fits, with 5px to spare.
            Order is deliberate and the same on both sides: the harmless one first, the harmful one
-           second — Water then Lava, Milk then Acid. */
+           second — Water then Lava, Milk then Acid. Bomb and Mystery (game v0.10.6a) come third. */
         /* The pair fills its column instead of hugging the outer edge. Sized to the text they
            left most of a 197px column empty while sitting at the far rim — the space was there
            all along, the buttons just did not ask for it. With flex they follow the window: about
@@ -2958,6 +2958,16 @@
             transition: transform 90ms ease, filter 90ms ease;
         }
         .mcfo-drink:hover { transform: translateY(-1px); filter: brightness(1.12); }
+        /* Named buttons carry their symbol as well (6.61). Six buttons share the tray since Bomb and
+           Mystery came, and a name no longer fits everywhere: at 1920px "Water" and "Mystery" got 48px
+           and were cut. fitDrinkLabels measures the names and, when one is cut, both sides show the
+           symbol instead (data-mcfo-tight); the name stays as tooltip. Measured rather than a fixed
+           breakpoint, because the size slider and the theme's font move it. */
+        .mcfo-drink__label { overflow: hidden; text-overflow: ellipsis; }
+        .mcfo-drink:not(.mcfo-drink--icon) > .mcfo-drink__icon { display: none; }
+        .mcfo-stack[data-mcfo-tight] > .mcfo-drink > .mcfo-drink__label { display: none; }
+        .mcfo-stack[data-mcfo-tight] > .mcfo-drink:not(.mcfo-drink--icon) > .mcfo-drink__icon { display: block; }
+        .mcfo-stack[data-mcfo-tight] > .mcfo-drink:not(.mcfo-drink--icon) { padding: 0; }
         /* Symbols instead of names (6.12): the symbol carries the meaning, so the button itself can
            take the page's look — the stock button colours here, which a theme recolours like the rest
            of this sheet, and a Deluxe skin's own buttons (SKIN_BUTTONS). The name stays as a tooltip
@@ -3498,7 +3508,9 @@
         html[data-mcfo-qbev~="water"] .mcfo-drink[data-mcfo-drink="water"] > .mcfo-questdot,
         html[data-mcfo-qbev~="lava"]  .mcfo-drink[data-mcfo-drink="lava"]  > .mcfo-questdot,
         html[data-mcfo-qbev~="milk"]  .mcfo-drink[data-mcfo-drink="milk"]  > .mcfo-questdot,
-        html[data-mcfo-qbev~="acid"]  .mcfo-drink[data-mcfo-drink="acid"]  > .mcfo-questdot { display: block; }
+        html[data-mcfo-qbev~="acid"]  .mcfo-drink[data-mcfo-drink="acid"]  > .mcfo-questdot,
+        html[data-mcfo-qbev~="bomb"]  .mcfo-drink[data-mcfo-drink="bomb"]  > .mcfo-questdot,
+        html[data-mcfo-qbev~="mystery"] .mcfo-drink[data-mcfo-drink="mystery"] > .mcfo-questdot { display: block; }
         /* The tier a quest asks for, in the Rebellion / Royal Celebration popup. Gold, and a small
            tag on the top edge; the armed state (red) still wins, it is the more urgent one. */
         .mcfo-menu--reb .mcfo-reb__tier { position: relative; }
@@ -9175,6 +9187,7 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
         // The title bar a touch denser than the page, as before (0.82 over 0.78).
         root.setProperty('--mcfo-glass-head', Math.min(0.97, alpha + 0.04).toFixed(2));
         root.setProperty('--mcfo-drink-scale', (settings.drinkScale / 100).toFixed(2));
+        requestAnimationFrame(fitDrinkLabels);   // a bigger font may no longer fit the names (6.61)
         root.setProperty('--mcfo-tsb-scale', (settings.tilesetBannerSize / 100).toFixed(2));
         root.setProperty('--mcfo-kc-scale', (settings.kingCornerSize / 100).toFixed(2));
         root.setProperty('--mcfo-kc-alpha', (settings.kingCornerAlpha / 100).toFixed(2));
@@ -9503,8 +9516,8 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
     // =========================================================================================
     // 7. BEVERAGES BESIDE THE ATTACK BUTTON
     // =========================================================================================
-    // Four buttons flanking the attack button — Water and Lava on the left, Milk and Acid on the
-    // right — each opening the three sizes with BOTH prices, so the currency stays a choice the
+    // Six buttons flanking the attack button — Water, Lava and Bomb on the left, Milk, Acid and
+    // Mystery on the right (Bomb and Mystery since game v0.10.6a) — each opening the three sizes with BOTH prices, so the currency stays a choice the
     // way the game's own panel offers it. An earlier version bought gold-only straight from the
     // king tile; that took the decision away and put the controls somewhere they did not belong.
     //
@@ -9523,10 +9536,16 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
           gold: { small: 225, medium: 525, large: 1200 }, diamonds: { small: 40, medium: 70, large: 100 } },
         { type: 'lava',  label: 'Lava',  side: 'left',  fill: '#e34116', stroke: '#ffbd69', text: '#ffffff',
           gold: { small: 150, medium: 450, large: 1050 }, diamonds: { small: 35, medium: 65, large: 95 } },
+        { type: 'bomb',  label: 'Bomb',  side: 'left',  fill: '#252633', stroke: '#ffcc65', text: '#ffffff',
+          gold: { small: 225, medium: 525, large: 1200 }, diamonds: { small: 40, medium: 70, large: 100 } },
         { type: 'milk',  label: 'Milk',  side: 'right', fill: '#f5f0dc', stroke: '#ffffff', text: '#182026',
           gold: { small: 180, medium: 600, large: 1350 }, diamonds: { small: 40, medium: 70, large: 100 } },
         { type: 'acid',  label: 'Acid',  side: 'right', fill: '#55c94d', stroke: '#c8ff80', text: '#ffffff',
           gold: { small: 180, medium: 600, large: 1350 }, diamonds: { small: 40, medium: 70, large: 100 } },
+        // Mystery is an order, not a bubble: it delivers a random mix of the others (or ready-made
+        // composites), so the board has no colour for it - this violet is the script's own.
+        { type: 'mystery', label: 'Mystery', side: 'right', fill: '#5b3a9e', stroke: '#d6b8ff', text: '#ffffff',
+          gold: { small: 225, medium: 600, large: 1350 }, diamonds: { small: 40, medium: 70, large: 100 } },
     ];
     const BEV_SIZES = [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']];
     const BEV_CURRENCIES = [['gold', 'Gold'], ['diamonds', 'Diamond']];
@@ -9725,6 +9744,15 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
             + '<path d="M10.2 2.8v5.1L5.3 17.9a2.3 2.3 0 0 0 2.1 3.4h9.2a2.3 2.3 0 0 0 2.1-3.4L13.8 7.9V2.8" fill="none" stroke="#16330f" stroke-width="1.3" stroke-linejoin="round"/>'
             + '<path d="M9 2.8h6" stroke="#16330f" stroke-width="1.6" stroke-linecap="round"/>'
             + '<circle cx="10.5" cy="16.5" r="1.1" fill="#c8ff80"/><circle cx="13.6" cy="18.6" r="0.9" fill="#c8ff80"/><circle cx="12.6" cy="10.8" r="0.8" fill="#55c94d"/></svg>',
+        bomb: '<svg class="mcfo-drink__icon" viewBox="0 0 24 24" aria-hidden="true">'
+            + '<circle cx="10.5" cy="14" r="7" fill="#252633" stroke="#ffcc65" stroke-width="1.3"/>'
+            + '<rect x="13.2" y="5.6" width="4" height="3.4" rx="0.8" transform="rotate(40 15.2 7.3)" fill="#4a4b5c" stroke="#ffcc65" stroke-width="1.1"/>'
+            + '<path d="M17 5.4c1-1.6 2.4-2 3.4-1.4" fill="none" stroke="#ffcc65" stroke-width="1.3" stroke-linecap="round"/>'
+            + '<circle cx="20.6" cy="3.6" r="1.3" fill="#ff8d45"/><path d="M7.4 11.6a3.6 3.6 0 0 1 2.6-2.2" fill="none" stroke="#8d8fa6" stroke-width="1.4" stroke-linecap="round"/></svg>',
+        mystery: '<svg class="mcfo-drink__icon" viewBox="0 0 24 24" aria-hidden="true">'
+            + '<circle cx="12" cy="12" r="9" fill="#5b3a9e" stroke="#20123d" stroke-width="1.3"/>'
+            + '<path d="M9.2 9.4a2.9 2.9 0 1 1 4.2 2.6c-.9.5-1.4 1.1-1.4 2.2v.6" fill="none" stroke="#f3e8ff" stroke-width="2" stroke-linecap="round"/>'
+            + '<circle cx="12" cy="17.6" r="1.2" fill="#f3e8ff"/></svg>',
     };
 
     function buildKingTray() {
@@ -9757,7 +9785,11 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
                     b.title = bev.label;
                     b.setAttribute('aria-label', bev.label);
                 } else {
-                    b.textContent = bev.label;
+                    // Name plus symbol: three to a side (6.61) leave too little room for the names in
+                    // a narrow window, so there the symbol takes over (container query in the CSS).
+                    b.innerHTML = '<span class="mcfo-drink__label"></span>' + DRINK_ICONS[bev.type];
+                    b.firstChild.textContent = bev.label;
+                    b.title = bev.label;
                     b.style.background = bev.fill;
                     b.style.borderColor = bev.stroke;
                     b.style.color = bev.text;
@@ -9792,11 +9824,28 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
         }
     }
 
+    // Names or symbols (6.61): with names on, a name that does not fit its button turns BOTH sides to
+    // symbols - one side of names and one of symbols would look like two different things. Measured
+    // with the names shown, so the attribute is taken off first; six buttons, so this is cheap.
+    function fitDrinkLabels() {
+        const stacks = [...document.querySelectorAll('.mcf-king-action-content .mcfo-stack[data-mcfo-icons="0"]')];
+        if (!stacks.length) return;
+        stacks.forEach(st => st.removeAttribute('data-mcfo-tight'));
+        const cut = stacks.some(st => [...st.querySelectorAll('.mcfo-drink__label')].some(l => l.clientWidth > 0 && l.scrollWidth > l.clientWidth + 1));
+        if (cut) stacks.forEach(st => st.setAttribute('data-mcfo-tight', '1'));
+    }
+
+    let drinkFitResize = null;
     function watchTray() {
         const tray = role('king-action-tray');
         if (!tray || tray.getAttribute('data-mcfo-watched') === '1') return;
         tray.setAttribute('data-mcfo-watched', '1');
-        new MutationObserver(() => { buildKingTray(); buildAttackAssist(); syncDrinkHeight(); placeKingTray(); }).observe(tray, { childList: true, subtree: true });
+        new MutationObserver(() => { buildKingTray(); buildAttackAssist(); syncDrinkHeight(); placeKingTray(); fitDrinkLabels(); }).observe(tray, { childList: true, subtree: true });
+        // The width changes with the window and the chat, without the tray's content changing.
+        if (typeof ResizeObserver === 'function') {
+            drinkFitResize = new ResizeObserver(() => requestAnimationFrame(fitDrinkLabels));
+            drinkFitResize.observe(tray);
+        }
     }
 
     // The king tile is fitted into its pane by scale and centred (kingPane.js syncKingTileFit:
@@ -13961,12 +14010,16 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
     //
     // The version comes from the userscript manager (GM_info), so it cannot drift from @version;
     // the fallback is for managers without GM_info and has to be kept in step by hand.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.60';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.61';
     const HOWTO_KEY = '#howto', CHANGELOG_KEY = '#changelog', WHATSNEW_KEY = '#whatsnew';
     const WHATSNEW_SEEN = 'mcfo_whatsnew_seen';   // the version whose What's new was dismissed for good
 
     // Newest first. The first entry is what What's new shows after a fresh install.
     const CHANGELOG = [
+        { v: '6.61', date: '2026-10-13', items: [
+            'Bomb and Mystery beverages (game v0.10.6a) beside the attack button: Water, Lava and Bomb on the left, Milk, Acid and Mystery on the right, each with its sizes and both prices like the others. They also count for the quest dots and for the beverages poured on the throne.',
+            'With names shown, the buttons switch to their symbols by themselves when a name would be cut - six buttons leave less room than four.',
+        ] },
         { v: '6.60', date: '2026-10-13', items: [
             'Royal Crests (game v0.10.6a) in the new inventory: their own page under King with previews, details, Equip, Random and the pool, and a Royal Crest slot in the Overview. Before, the new inventory did not show them at all.',
             'Loadouts save and put on your Royal Crest too, pool included.',
