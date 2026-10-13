@@ -1,5 +1,11 @@
     // Newest first. The first entry is what What's new shows after a fresh install.
     const CHANGELOG = [
+        { v: '6.60', date: '2026-10-13', items: [
+            'Royal Crests (game v0.10.6a) in the new inventory: their own page under King with previews, details, Equip, Random and the pool, and a Royal Crest slot in the Overview. Before, the new inventory did not show them at all.',
+            'Loadouts save and put on your Royal Crest too, pool included.',
+            'Settings \u203a Cosmetics: Hide the Royal Crest - the game\'s plain shield instead of the King\'s crest in a Royal Celebration.',
+            'Default Tolls say how they work since the update: your choices apply from your next reign on, and picking a toll that is used elsewhere swaps the two.',
+        ] },
         { v: '6.59.1', date: '2026-10-08', items: [
             'Attack when free waits out a Royal Celebration and your own Rebellion, the way it waits out a lava cooldown: your autobid keeps playing, no unbid is sent, and the attack goes in right after. Before, it sent an unbid for nothing and gave up after five minutes ("NOT FREE IN 5 MIN").',
         ] },
