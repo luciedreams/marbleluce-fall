@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MarbleLuceFall
 // @namespace    http://tampermonkey.net/
-// @version      6.61
+// @version      6.61.1
 // @description  Layout overhaul for Marble Crownfall: 50+ colour themes, pages as windows over the game, autobid with risk protection and tile lists, unbid and extra ticket chips, quest alarm and euro prices in the shop, claim all dailies, new inventory and achievements pages, loadouts, adjustable reign read-outs with the toll on the tile, beverage bar, auto beverages on the throne, enhanced chat, hide any cosmetic, a music player with a movable bar, performance levels, how-to and what’s new.
 // @author       DreamingLucie
 // @match        *://*.marblecrownfall.com/*
@@ -789,7 +789,11 @@
                     }
                 } else if (kind === 'context' || kind === 'equip') {
                     const slot = kind === 'equip' ? (m.contexts[0] && m.contexts[0].slotType) : extra;
-                    if (slot) { await post(`/api/inventory/${p.endpoint}/selected`, { slotType: slot, inventoryItemId: id }); await load(p.id, true); }
+                    // Default tolls want the list's current revision since game v0.10.6a (expectedRevision),
+                    // or the server answers "Reload inventory before change your Default Tolls". Read fresh:
+                    // every pick counts it up, and a swap changes two occasions at once.
+                    const rev = p.kind === 'toll' ? { expectedRevision: (await api(p.url)).revision } : {};
+                    if (slot) { await post(`/api/inventory/${p.endpoint}/selected`, { slotType: slot, inventoryItemId: id, ...rev }); await load(p.id, true); }
                 }
                 st.msg = '';
             } catch (e) {
@@ -14010,12 +14014,15 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
     //
     // The version comes from the userscript manager (GM_info), so it cannot drift from @version;
     // the fallback is for managers without GM_info and has to be kept in step by hand.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.61';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.61.1';
     const HOWTO_KEY = '#howto', CHANGELOG_KEY = '#changelog', WHATSNEW_KEY = '#whatsnew';
     const WHATSNEW_SEEN = 'mcfo_whatsnew_seen';   // the version whose What's new was dismissed for good
 
     // Newest first. The first entry is what What's new shows after a fresh install.
     const CHANGELOG = [
+        { v: '6.61.1', date: '2026-10-13', items: [
+            'Default Tolls can be changed again in the new inventory and through loadouts. Since game v0.10.6a every change has to name the current state of the list, and without it the game answered "Reload inventory before change your Default Tolls".',
+        ] },
         { v: '6.61', date: '2026-10-13', items: [
             'Bomb and Mystery beverages (game v0.10.6a) beside the attack button: Water, Lava and Bomb on the left, Milk, Acid and Mystery on the right, each with its sizes and both prices like the others. They also count for the quest dots and for the beverages poured on the throne.',
             'With names shown, the buttons switch to their symbols by themselves when a name would be cut - six buttons leave less room than four.',
@@ -17335,6 +17342,12 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
     }
     async function loFetch(path, method, body) {
         if (method && method !== 'GET' && String(path).startsWith('/api/inventory/crowns')) await invCacheDrop(window);   // 0a
+        // Default tolls: the current revision of the list goes along since game v0.10.6a, read fresh
+        // before every pick (each one counts it up), or the server refuses the change.
+        if (method === 'POST' && path === '/api/inventory/default-tolls/selected' && body && body.expectedRevision === undefined) {
+            const cur = await loFetch('/api/inventory/default-tolls');
+            if (cur.data && cur.data.revision !== undefined) body = Object.assign({}, body, { expectedRevision: cur.data.revision });
+        }
         const r = await fetch(path, {
             method: method || 'GET', credentials: 'include',
             headers: body ? { 'Content-Type': 'application/json', Accept: 'application/json' } : { Accept: 'application/json' },
