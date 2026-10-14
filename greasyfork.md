@@ -34,7 +34,7 @@ A layout overhaul for **[Marble Crownfall](https://marblecrownfall.com)**. It ma
 - **Shop and dailies** — a gold Quest tag on shop offers that would complete an open shop quest (and a gold dot while one is in the rotation), gold dots on the Rebellion and beverage buttons while a quest asks for them (the tier it wants framed in gold), a refresh button on the Dailies window, euro prices beside every diamond price, and "Claim all dailies" in one click from the account menu — or, opt-in, claimed by themselves.
 - **Player gifts** — a window in the account menu that lists everyone playing this episode with the Gold and Diamond Gifts you can still give them, with a search box, a filter for players you can still gift, and two-click sending. Faster than the search on the profile page, and players you are done with are remembered.
 - **Update notice** — a red dot on the account card within minutes of a new release, with a one-click update; both versions (MCF and MLF) in the footer.
-- **Settings gear** — one click to all settings, including the game's own sound and graphics levels.
+- **Settings gear** — one click to all settings, including the game's own sound and graphics levels and its Unattended Viewing Mode (Settings › Notifications).
 - **Performance levels** and **Deluxe effects** (full, subtle, off) for slower machines, plus a frame rate counter with min, average and max.
 - **How-to** and **What's new** inside the script.
 

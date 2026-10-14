@@ -243,6 +243,7 @@
             { key: 'achOverhaul', label: 'New achievements page',
               hint: 'Built like the new inventory: categories on the left with how far you are in each, an Overview on top (AP, next reward, AP reward cycles, closest to done, recently unlocked, Public Chronicle), search, In progress / Unlocked, Badges / Career lines and sorting above the cards, everything about the picked achievement on the right - for career lines all milestones earned and the next one. "Classic achievements" at the bottom of its sidebar opens the game\'s page for one visit. Takes effect the next time the page opens.' },
         ]},
+        { title: 'Notifications', blurb: 'The game\'s unattended viewing: reward pop-ups that close by themselves.', render: 'notifications' },
         { title: 'Footer', blurb: 'Season line, build, and which buttons stay.', items: [
             { key: 'footerMeta', label: 'Season, episode and build',
               hint: 'Bottom left instead of on the tileset card, plus the game build.' },

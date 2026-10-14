@@ -331,6 +331,12 @@
             return { text: `Effects ${s.sfx ? 'on' : 'off'} \u00b7 ${musicText}`,
                      none: !s.sfx && !s.music && !settings.musicPlayer };
         }
+        if (section.render === 'notifications') {
+            const u = unattendedState();
+            if (!u) return { text: 'Not loaded yet', none: true };
+            if (!u.signedIn) return { text: 'Only when signed in', none: true };
+            return { text: `Unattended viewing ${u.on ? 'on' : 'off'}${u.pending ? ' \u00b7 rewards to review' : ''}`, none: !u.on && !u.pending };
+        }
         const items = sectionItems(section);
         const on = items.filter(i => settings[i.key] && (!i.needs || settings[i.needs])).length;
         return { text: `${on} of ${items.length} on`, none: on === 0 };
@@ -341,6 +347,8 @@
         if (section.render === 'performance') return ['perfLevel', 'perfFpsMeter', ...PERF_LEVERS.map(l => l.key)];
         // The game keeps its own sound (11c); only the player's own settings are ours (11e).
         if (section.render === 'sound') return ['musicPlayer', 'musicBar', 'musicShuffle', 'musicVolume'];
+        // The game keeps unattended viewing itself (11g): nothing of ours to reset.
+        if (section.render === 'notifications') return [];
         const keys = [];
         for (const item of sectionItems(section)) { keys.push(item.key); for (const sub of itemSubs(item)) if (sub.key) keys.push(sub.key); }
         if (section.throne) keys.push('throneDrinkSet');
@@ -371,6 +379,8 @@
             box.appendChild(themeCard(() => renderSettings(body)));
         } else if (section.render === 'sound') {
             box.appendChild(soundCard(() => renderSettings(body)));
+        } else if (section.render === 'notifications') {
+            box.appendChild(notificationsCard(() => renderSettings(body)));
         } else {
             // On the throne page the cost warning stands right above Pour beverages, not above the
             // toll switches, which cost nothing: the items are split into two cards around it.
@@ -440,6 +450,7 @@
                 settings.musicExcluded = [];     // a new array, never the one behind the defaults
                 music.queue = [];
             }
+            if (section.render === 'notifications') unattendedReset();   // the game's default: off, 20 s
             for (const k of sectionKeys(section)) settings[k] = settingDefaults[k];
         }, body));
     }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MarbleLuceFall
 // @namespace    http://tampermonkey.net/
-// @version      6.61.1
+// @version      6.62
 // @description  Layout overhaul for Marble Crownfall: 50+ colour themes, pages as windows over the game, autobid with risk protection and tile lists, unbid and extra ticket chips, quest alarm and euro prices in the shop, claim all dailies, new inventory and achievements pages, loadouts, adjustable reign read-outs with the toll on the tile, beverage bar, auto beverages on the throne, enhanced chat, hide any cosmetic, a music player with a movable bar, performance levels, how-to and what’s new.
 // @author       DreamingLucie
 // @match        *://*.marblecrownfall.com/*
@@ -2243,6 +2243,7 @@
             { key: 'achOverhaul', label: 'New achievements page',
               hint: 'Built like the new inventory: categories on the left with how far you are in each, an Overview on top (AP, next reward, AP reward cycles, closest to done, recently unlocked, Public Chronicle), search, In progress / Unlocked, Badges / Career lines and sorting above the cards, everything about the picked achievement on the right - for career lines all milestones earned and the next one. "Classic achievements" at the bottom of its sidebar opens the game\'s page for one visit. Takes effect the next time the page opens.' },
         ]},
+        { title: 'Notifications', blurb: 'The game\'s unattended viewing: reward pop-ups that close by themselves.', render: 'notifications' },
         { title: 'Footer', blurb: 'Season line, build, and which buttons stay.', items: [
             { key: 'footerMeta', label: 'Season, episode and build',
               hint: 'Bottom left instead of on the tileset card, plus the game build.' },
@@ -14014,12 +14015,15 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
     //
     // The version comes from the userscript manager (GM_info), so it cannot drift from @version;
     // the fallback is for managers without GM_info and has to be kept in step by hand.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.61.1';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.62';
     const HOWTO_KEY = '#howto', CHANGELOG_KEY = '#changelog', WHATSNEW_KEY = '#whatsnew';
     const WHATSNEW_SEEN = 'mcfo_whatsnew_seen';   // the version whose What's new was dismissed for good
 
     // Newest first. The first entry is what What's new shows after a fresh install.
     const CHANGELOG = [
+        { v: '6.62', date: '2026-10-14', items: [
+            'New page Settings › Notifications with the game\'s Unattended Viewing Mode (game v0.10.6b): while it is on, the diamond reward pop-up no longer covers the board - a short line says what came in and goes after 10 to 60 seconds. Review rewards brings the summary back. The game hid the switch behind its sound button, which the settings gear replaces, so it could not be reached before.',
+        ] },
         { v: '6.61.1', date: '2026-10-13', items: [
             'Default Tolls can be changed again in the new inventory and through loadouts. Since game v0.10.6a every change has to name the current state of the list, and without it the game answered "Reload inventory before change your Default Tolls".',
         ] },
@@ -14811,6 +14815,12 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
             return { text: `Effects ${s.sfx ? 'on' : 'off'} \u00b7 ${musicText}`,
                      none: !s.sfx && !s.music && !settings.musicPlayer };
         }
+        if (section.render === 'notifications') {
+            const u = unattendedState();
+            if (!u) return { text: 'Not loaded yet', none: true };
+            if (!u.signedIn) return { text: 'Only when signed in', none: true };
+            return { text: `Unattended viewing ${u.on ? 'on' : 'off'}${u.pending ? ' \u00b7 rewards to review' : ''}`, none: !u.on && !u.pending };
+        }
         const items = sectionItems(section);
         const on = items.filter(i => settings[i.key] && (!i.needs || settings[i.needs])).length;
         return { text: `${on} of ${items.length} on`, none: on === 0 };
@@ -14821,6 +14831,8 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
         if (section.render === 'performance') return ['perfLevel', 'perfFpsMeter', ...PERF_LEVERS.map(l => l.key)];
         // The game keeps its own sound (11c); only the player's own settings are ours (11e).
         if (section.render === 'sound') return ['musicPlayer', 'musicBar', 'musicShuffle', 'musicVolume'];
+        // The game keeps unattended viewing itself (11g): nothing of ours to reset.
+        if (section.render === 'notifications') return [];
         const keys = [];
         for (const item of sectionItems(section)) { keys.push(item.key); for (const sub of itemSubs(item)) if (sub.key) keys.push(sub.key); }
         if (section.throne) keys.push('throneDrinkSet');
@@ -14851,6 +14863,8 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
             box.appendChild(themeCard(() => renderSettings(body)));
         } else if (section.render === 'sound') {
             box.appendChild(soundCard(() => renderSettings(body)));
+        } else if (section.render === 'notifications') {
+            box.appendChild(notificationsCard(() => renderSettings(body)));
         } else {
             // On the throne page the cost warning stands right above Pour beverages, not above the
             // toll switches, which cost nothing: the items are split into two cards around it.
@@ -14920,6 +14934,7 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
                 settings.musicExcluded = [];     // a new array, never the one behind the defaults
                 music.queue = [];
             }
+            if (section.render === 'notifications') unattendedReset();   // the game's default: off, 20 s
             for (const k of sectionKeys(section)) settings[k] = settingDefaults[k];
         }, body));
     }
@@ -16647,6 +16662,131 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
         return card;
     }
 
+    // =========================================================================================
+    // 11g. NOTIFICATIONS: THE GAME'S UNATTENDED VIEWING, FROM THE SETTINGS (6.62)
+    // =========================================================================================
+    // Game build v0.10.6b added "Unattended Viewing Mode" (unattendedViewing.js): while it is on,
+    // the diamond reward pop-up no longer covers the board. A short line bottom left says what
+    // came in and goes after 10 to 60 seconds; the rewards are credited anyway, and the summary
+    // since the last OK waits behind "Review rewards". The game put the switch into the panel
+    // behind its sound button — with the gear on, that panel is hidden, so neither the switch nor
+    // Review rewards could be reached. It is a notification setting, so it gets a page of its own.
+    //
+    // Like the graphics picker (11d) this keeps no second copy. The game keeps the choice itself
+    // (localStorage mcf.unattendedViewing.v1) and listens on the document: a click on anything
+    // matching [data-role="unattended-toggle"] or [data-role="unattended-review-rewards"], a change
+    // event on [data-role="unattended-seconds"]. Working its hidden controls is exactly the path
+    // its own panel takes. The controls stay hidden for guests and signed-out viewers, and the
+    // game ignores them there — this page says so instead of offering a dead switch.
+    const unattendedEl = r => soundEl('unattended-' + r);
+
+    function unattendedState() {
+        const toggle = unattendedEl('toggle');
+        if (!toggle) return null;
+        const box = toggle.closest('[data-role="unattended-controls"]');
+        const review = unattendedEl('review-rewards');
+        return {
+            signedIn: !!box && !box.hidden,
+            on: toggle.getAttribute('aria-pressed') === 'true',
+            seconds: Number((unattendedEl('seconds') || {}).value) || 20,
+            pending: !!review && !review.disabled,
+        };
+    }
+
+    function unattendedSeconds(value) {
+        const input = unattendedEl('seconds');
+        if (!input || Number(input.value) === Number(value)) return;
+        input.value = value;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function unattendedReset() {
+        const u = unattendedState();
+        if (!u || !u.signedIn) return;
+        if (u.on) unattendedEl('toggle').click();
+        unattendedSeconds(20);
+    }
+
+    // The game redraws its controls when the choice changes or a reward summary starts or stops
+    // waiting. One observer per open page follows that, so "Review rewards" lights up while the
+    // page is open; it lets go as soon as the page is gone.
+    let unattendedWatch = null;
+    function watchUnattended(card, redraw) {
+        if (unattendedWatch) unattendedWatch.disconnect();
+        const box = unattendedEl('toggle') && unattendedEl('toggle').closest('[data-role="unattended-controls"]');
+        if (!box) return;
+        let queued = false;
+        unattendedWatch = new MutationObserver(() => {
+            if (!card.isConnected) { unattendedWatch.disconnect(); unattendedWatch = null; return; }
+            if (queued) return;
+            queued = true;
+            requestAnimationFrame(() => { queued = false; if (card.isConnected) redraw(); });
+        });
+        unattendedWatch.observe(box, { attributes: true, childList: true, subtree: true, characterData: true });
+    }
+
+    function notificationsCard(redraw) {
+        const card = document.createElement('div');
+        card.className = 'mcfo-set__card';
+        const u = unattendedState();
+        if (!u || !u.signedIn) {
+            const note = document.createElement('div');
+            note.className = 'mcfo-set__notice';
+            note.textContent = !u
+                ? 'The game has not drawn this control yet. Open this page again in a moment.'
+                : 'Unattended viewing is only there while you are signed in with Twitch (the game\'s rule).';
+            card.appendChild(note);
+            return card;
+        }
+        const wrap = document.createElement('div');
+        wrap.className = 'mcfo-set__item';
+        const row = document.createElement('label');
+        row.className = 'mcfo-set__row';
+        row.innerHTML = '<span class="mcfo-set__text"><span class="mcfo-set__label"></span>'
+                      + '<span class="mcfo-set__hint"></span></span>'
+                      + '<input type="checkbox" class="mcfo-switch__input">'
+                      + '<span class="mcfo-switch" aria-hidden="true"></span>';
+        row.querySelector('.mcfo-set__label').textContent = 'Unattended viewing';
+        row.querySelector('.mcfo-set__hint').textContent = 'For long viewing sessions or a stream. The diamond reward pop-up '
+            + 'no longer covers the board: a short line bottom left says what came in and goes after the time below. '
+            + 'The rewards are credited anyway; the summary since your last OK waits under Review rewards. '
+            + 'The game keeps this choice itself, in this browser.';
+        const input = row.querySelector('input');
+        input.checked = u.on;
+        input.addEventListener('change', () => {
+            const now = unattendedState();
+            if (now && now.on !== input.checked) unattendedEl('toggle').click();
+            redraw();
+        });
+        wrap.appendChild(row);
+
+        const time = document.createElement('div');
+        time.className = 'mcfo-set__sub';
+        time.innerHTML = '<span class="mcfo-set__sublabel">Notice duration</span>'
+                       + '<input type="range" class="mcfo-set__range" min="10" max="60" step="1">'
+                       + '<span class="mcfo-set__val"></span>';
+        const range = time.querySelector('input');
+        const val = time.querySelector('.mcfo-set__val');
+        range.value = u.seconds;
+        val.textContent = u.seconds + ' s';
+        range.addEventListener('input', () => { val.textContent = range.value + ' s'; });
+        // Handed over when let go: every change rewrites the game's localStorage entry.
+        range.addEventListener('change', () => unattendedSeconds(Number(range.value)));
+        time.toggleAttribute('data-off', !u.on);
+
+        const review = document.createElement('div');
+        review.className = 'mcfo-set__sub';
+        review.innerHTML = '<span class="mcfo-set__sublabel">Rewards</span><button type="button" class="mcfo-set__reset"></button>';
+        const btn = review.querySelector('button');
+        btn.textContent = u.pending ? 'Review rewards (pending)' : 'Nothing to review';
+        btn.disabled = !u.pending;
+        btn.addEventListener('click', () => { const b = unattendedEl('review-rewards'); if (b && !b.disabled) b.click(); });
+
+        wrap.append(time, review);
+        card.appendChild(wrap);
+        watchUnattended(card, redraw);
+        return card;
+    }
     // =========================================================================================
     // 12b. TILESET BANNER: THE NAME INSTEAD OF THE SPLASH PICTURE (6.24)
     // =========================================================================================
