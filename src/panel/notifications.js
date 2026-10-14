@@ -61,6 +61,24 @@
         unattendedWatch.observe(box, { attributes: true, childList: true, subtree: true, characterData: true });
     }
 
+    // A button only while there is something to review. A disabled .mcfo-set__reset is hidden on
+    // purpose (the reset buttons of the sliders vanish at their default), so the other states are
+    // a line of text instead.
+    function unattendedReviewControl(why) {
+        if (why) {
+            const t = document.createElement('span');
+            t.className = 'mcfo-set__hint';
+            t.textContent = why;
+            return t;
+        }
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'mcfo-set__reset';
+        btn.textContent = 'Review rewards (pending)';
+        btn.addEventListener('click', () => { const b = unattendedEl('review-rewards'); if (b && !b.disabled) b.click(); });
+        return btn;
+    }
+
     function notificationsCard(redraw) {
         const card = document.createElement('div');
         card.className = 'mcfo-set__card';
@@ -112,11 +130,8 @@
 
         const review = document.createElement('div');
         review.className = 'mcfo-set__sub';
-        review.innerHTML = '<span class="mcfo-set__sublabel">Rewards</span><button type="button" class="mcfo-set__reset"></button>';
-        const btn = review.querySelector('button');
-        btn.textContent = u.pending ? 'Review rewards (pending)' : 'Nothing to review';
-        btn.disabled = !u.pending;
-        btn.addEventListener('click', () => { const b = unattendedEl('review-rewards'); if (b && !b.disabled) b.click(); });
+        review.innerHTML = '<span class="mcfo-set__sublabel">Rewards</span>';
+        review.appendChild(unattendedReviewControl(u.pending ? '' : 'Nothing to review'));
 
         wrap.append(time, review);
         card.appendChild(wrap);

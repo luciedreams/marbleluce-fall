@@ -1,5 +1,8 @@
     // Newest first. The first entry is what What's new shows after a fresh install.
     const CHANGELOG = [
+        { v: '6.62.1', date: '2026-10-14', items: [
+            'Settings › Notifications: with nothing to review, the Rewards line now says so instead of staying empty.',
+        ] },
         { v: '6.62', date: '2026-10-14', items: [
             'New page Settings › Notifications with the game\'s Unattended Viewing Mode (game v0.10.6b): while it is on, the diamond reward pop-up no longer covers the board - a short line says what came in and goes after 10 to 60 seconds. Review rewards brings the summary back. The game hid the switch behind its sound button, which the settings gear replaces, so it could not be reached before.',
         ] },

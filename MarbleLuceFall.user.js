@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MarbleLuceFall
 // @namespace    http://tampermonkey.net/
-// @version      6.62
+// @version      6.62.1
 // @description  Layout overhaul for Marble Crownfall: 50+ colour themes, pages as windows over the game, autobid with risk protection and tile lists, unbid and extra ticket chips, quest alarm and euro prices in the shop, claim all dailies, new inventory and achievements pages, loadouts, adjustable reign read-outs with the toll on the tile, beverage bar, auto beverages on the throne, enhanced chat, hide any cosmetic, a music player with a movable bar, performance levels, how-to and what’s new.
 // @author       DreamingLucie
 // @match        *://*.marblecrownfall.com/*
@@ -14015,12 +14015,15 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
     //
     // The version comes from the userscript manager (GM_info), so it cannot drift from @version;
     // the fallback is for managers without GM_info and has to be kept in step by hand.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.62';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.62.1';
     const HOWTO_KEY = '#howto', CHANGELOG_KEY = '#changelog', WHATSNEW_KEY = '#whatsnew';
     const WHATSNEW_SEEN = 'mcfo_whatsnew_seen';   // the version whose What's new was dismissed for good
 
     // Newest first. The first entry is what What's new shows after a fresh install.
     const CHANGELOG = [
+        { v: '6.62.1', date: '2026-10-14', items: [
+            'Settings › Notifications: with nothing to review, the Rewards line now says so instead of staying empty.',
+        ] },
         { v: '6.62', date: '2026-10-14', items: [
             'New page Settings › Notifications with the game\'s Unattended Viewing Mode (game v0.10.6b): while it is on, the diamond reward pop-up no longer covers the board - a short line says what came in and goes after 10 to 60 seconds. Review rewards brings the summary back. The game hid the switch behind its sound button, which the settings gear replaces, so it could not be reached before.',
         ] },
@@ -16725,6 +16728,24 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
         unattendedWatch.observe(box, { attributes: true, childList: true, subtree: true, characterData: true });
     }
 
+    // A button only while there is something to review. A disabled .mcfo-set__reset is hidden on
+    // purpose (the reset buttons of the sliders vanish at their default), so the other states are
+    // a line of text instead.
+    function unattendedReviewControl(why) {
+        if (why) {
+            const t = document.createElement('span');
+            t.className = 'mcfo-set__hint';
+            t.textContent = why;
+            return t;
+        }
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'mcfo-set__reset';
+        btn.textContent = 'Review rewards (pending)';
+        btn.addEventListener('click', () => { const b = unattendedEl('review-rewards'); if (b && !b.disabled) b.click(); });
+        return btn;
+    }
+
     function notificationsCard(redraw) {
         const card = document.createElement('div');
         card.className = 'mcfo-set__card';
@@ -16776,11 +16797,8 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
 
         const review = document.createElement('div');
         review.className = 'mcfo-set__sub';
-        review.innerHTML = '<span class="mcfo-set__sublabel">Rewards</span><button type="button" class="mcfo-set__reset"></button>';
-        const btn = review.querySelector('button');
-        btn.textContent = u.pending ? 'Review rewards (pending)' : 'Nothing to review';
-        btn.disabled = !u.pending;
-        btn.addEventListener('click', () => { const b = unattendedEl('review-rewards'); if (b && !b.disabled) b.click(); });
+        review.innerHTML = '<span class="mcfo-set__sublabel">Rewards</span>';
+        review.appendChild(unattendedReviewControl(u.pending ? '' : 'Nothing to review'));
 
         wrap.append(time, review);
         card.appendChild(wrap);
