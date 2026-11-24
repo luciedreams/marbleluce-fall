@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MarbleLuceFall
 // @namespace    http://tampermonkey.net/
-// @version      6.62.1
+// @version      6.62.2
 // @description  Layout overhaul for Marble Crownfall: 50+ colour themes, pages as windows over the game, autobid with risk protection and tile lists, unbid and extra ticket chips, quest alarm and euro prices in the shop, claim all dailies, new inventory and achievements pages, loadouts, adjustable reign read-outs with the toll on the tile, beverage bar, auto beverages on the throne, enhanced chat, hide any cosmetic, a music player with a movable bar, performance levels, how-to and what’s new.
 // @author       DreamingLucie
 // @match        *://*.marblecrownfall.com/*
@@ -1762,7 +1762,7 @@
     //            background or King bubble (panel.sourceSlot), username = username style. Its
     //            plainFallback carries the same colours and is neutralised with it. Checked against
     //            the game's own resolveChatCosmeticRenderModel: each part comes out as the plain model.
-    //            Hiding ALL chat cosmetics uses the game's own button in the chat header instead (below).
+    //            Hiding ALL chat cosmetics sets the game's own cosmetics menu in the chat header to Off instead (below).
     //   king     snapshot.kingCosmetics.wreath and .crest (king socket /king/ws and /api/king/snapshot;
     //            without a crest recipe the game keeps its plain celebration shield); the crown
     //            is the 3D overlay layer and is hidden by CSS, as the Maximum performance level does.
@@ -2163,7 +2163,7 @@
                   options: [[0, 'Show'], [1, 'Standard size'], [2, 'Hide']],
                   hint: 'Standard size: every decorated indicator keeps its look and is drawn as small as the game\'s plain bid banner; the amount keeps its size. Hide: every bid in the plain grey banner.' },
             ]},
-            { title: 'Chat', note: 'From the next message on. Hiding the whole group uses the game\'s own cosmetics button in the chat header and turns it back on when you switch this off.', items: [
+            { title: 'Chat', note: 'From the next message on. Hiding the whole group sets the game\'s own cosmetics menu in the chat header to Off and puts it back when you switch this off.', items: [
                 { key: 'hideCosChat', def: false, redraw: true, group: true, label: 'Hide all chat cosmetics' },
                 { key: 'hideChatColours', def: false, label: 'Hide chat font colours', hint: 'Messages in plain white.' },
                 { key: 'hideChatBackgrounds', def: false, label: 'Hide chat backgrounds', hint: 'No coloured or patterned panels behind messages.' },
@@ -2213,7 +2213,7 @@
             { key: 'chatHideToll', needs: 'chatPlus', label: 'Hide toll messages',
               hint: '"... changed the Crown toll" — the toll stands on the king tile.' },
             { key: 'chatCosmeticSwitch', needs: 'chatPlus', label: 'Cosmetics button in colour',
-              hint: 'The sparkles button in the chat header (chat cosmetics) turns green while cosmetics are on.' },
+              hint: 'The sparkles button in the chat header (chat cosmetics) turns green while cosmetics show (Full or Static).' },
             { key: 'chatSizes', needs: 'chatPlus', label: 'Text sizes',
               hint: 'Names and messages in the chat, each on its own.',
               subs: [
@@ -2679,24 +2679,67 @@
         for (const p of parts) COS_COVER[COS_KEYS[p]] = ['hideCosAll', COS_GROUP_KEYS[g]];
     }
     const cosCovered = key => (COS_COVER[key] || []).some(k => settings[k]);
-    // The game's own chat cosmetics button (chat header, aria-pressed = cosmetics on, remembered by
-    // the game in mcf.chat.cosmetics.enabled.v1) does "all chat cosmetics" better than any filter:
-    // already drawn lines turn plain too. Pressed only when our wish changes, so a click of the
-    // player's own on that button is respected until the switch here is touched again; turned back
-    // on only if this script was the one that turned it off.
+    // The game's own chat cosmetics control (chat header) does "all chat cosmetics" better than any
+    // filter: already drawn lines turn plain too. Since MCF v1.0.4 it is a <select> with three modes,
+    // full (animated), static (no motion) and off, remembered by the game in mcf.chat.cosmetics.mode.v1;
+    // up to v1.0.3 it was an on/off button with aria-pressed. Set only when our wish changes, so a
+    // choice of the player's own there is respected until the switch here is touched again; put back
+    // (to the mode it had before) only if this script was the one that set it to off.
     let cosChatWish = null;
     function cosChatNative() {
+        cosModeWrap();
         const want = !!(settings.hideCosAll || settings.hideCosChat);
         if (want === cosChatWish) return;
-        const btn = document.querySelector('.mcf-chat__cosmetics-toggle, [data-role="chat-cosmetics-toggle"]');
-        if (!btn) return;   // the chat is not there yet: try again on the next round
-        const on = btn.getAttribute('aria-pressed') === 'true';
-        let ours = false;
-        try { ours = localStorage.getItem('mcfo_cos_chatnative') === '1'; } catch (e) {}
-        if (want && on) { btn.click(); try { localStorage.setItem('mcfo_cos_chatnative', '1'); } catch (e) {} }
-        else if (!want && !on && ours) btn.click();
+        const ctl = document.querySelector('[data-role="chat-cosmetics-toggle"], .mcf-chat__cosmetics-toggle');
+        if (!ctl) return;   // the chat is not there yet: try again on the next round
+        if (ctl.disabled) return;   // cosmetics unavailable right now: the game turns it on with its config
+        let ours = null;
+        try { ours = localStorage.getItem('mcfo_cos_chatnative'); } catch (e) {}
+        if (ctl.tagName === 'SELECT') {
+            const mode = ctl.value;
+            if (want && mode !== 'off') {
+                ctl.value = 'off';
+                ctl.dispatchEvent(new Event('change', { bubbles: true }));
+                try { localStorage.setItem('mcfo_cos_chatnative', mode); } catch (e) {}
+            } else if (!want && mode === 'off' && ours) {
+                ctl.value = ours === 'static' ? 'static' : 'full';   // '1' = set by a version before 6.62.2
+                ctl.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        } else {
+            const on = ctl.getAttribute('aria-pressed') === 'true';
+            if (want && on) { ctl.click(); try { localStorage.setItem('mcfo_cos_chatnative', '1'); } catch (e) {} }
+            else if (!want && !on && ours) ctl.click();
+        }
         if (!want) try { localStorage.removeItem('mcfo_cos_chatnative'); } catch (e) {}
         cosChatWish = want;
+        cosModeWrap();
+    }
+    // The select shows only a symbol (6.62.2): sparkles for Full, the same sparkles dimmed for Static,
+    // struck through for Off. A select draws no ::before/::after, so it sits in a frame of ours,
+    // .mcfo-cosmode, which carries the look (and the skins' button look) and the symbol; the select
+    // itself lies invisible on top and still takes the click, so the game's own dropdown opens with
+    // its readable options. The frame mirrors the mode in data-mode on every change.
+    function cosModeWrap() {
+        const ctl = document.querySelector('select[data-role="chat-cosmetics-toggle"]');
+        if (!ctl) return;
+        let frame = ctl.parentElement;
+        if (!frame || !frame.classList.contains('mcfo-cosmode')) {
+            frame = document.createElement('span');
+            frame.className = 'mcfo-cosmode';
+            ctl.before(frame);
+            frame.appendChild(ctl);
+        }
+        if (!ctl.dataset.mcfoMode) {
+            ctl.dataset.mcfoMode = '1';
+            ctl.addEventListener('change', () => setTimeout(cosModeWrap, 0));
+        }
+        const names = { full: 'Full: animated styles', static: 'Static: styles without motion', off: 'Off: plain chat' };
+        const mode = names[ctl.value] ? ctl.value : 'full';
+        if (frame.dataset.mode !== mode) frame.dataset.mode = mode;
+        const dis = ctl.disabled ? '1' : '';
+        if ((frame.dataset.disabled || '') !== dis) { if (dis) frame.dataset.disabled = '1'; else delete frame.dataset.disabled; }
+        const tip = ctl.disabled ? 'Chat cosmetics are unavailable' : `Chat cosmetics - ${names[mode]} (click to change)`;
+        if (ctl.title !== tip) ctl.title = tip;
     }
     function setCosmeticsHidden() {
         cosHide = cosCompute(settings);
@@ -4345,32 +4388,65 @@
         html[data-mcfo-chatplus="1"] :is([data-role="chat-messages"], .mcf-chat__messages) article.mcf-chat__message[data-mcf-group="end"] {
             border-top-left-radius: 0 !important; border-top-right-radius: 0 !important; padding-top: 4px !important;
         }
-        /* The game's cosmetics button said "Cosmetics on/off" in words — the widest thing in the
+        /* Up to MCF v1.0.3 (kept in case the game rolls back). The game's cosmetics button said "Cosmetics on/off" in words — the widest thing in the
            chat header. Since 6.16.1 it is a symbol the size of its neighbours: sparkles, struck
            through while off. The state is in its aria-pressed; only the look hangs on that. The
            button stays the game's own: click and text are still the game's, the text just is not
            shown (screen readers still read it, and it comes back as the tooltip). */
-        .mcf-chat__cosmetics-toggle {
+        button.mcf-chat__cosmetics-toggle {
             position: relative; display: grid !important; place-items: center; box-sizing: border-box;
             width: 30px !important; min-width: 30px !important; height: 30px !important; min-height: 30px !important;
             padding: 0 !important; font-size: 0 !important; letter-spacing: 0 !important; line-height: 0 !important;
             overflow: hidden; cursor: pointer; transition: background 0.2s, border-color 0.2s, color 0.2s;
         }
-        .mcf-chat__cosmetics-toggle::after {
+        button.mcf-chat__cosmetics-toggle::after {
             content: ''; width: 17px; height: 17px; background: currentColor; opacity: 0.5;
             -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 2l1.8 5.2L17 9l-5.2 1.8L10 16l-1.8-5.2L3 9l5.2-1.8z'/%3E%3Cpath d='M18 13l.9 2.1L21 16l-2.1.9L18 19l-.9-2.1L15 16l2.1-.9z'/%3E%3Cpath d='M18 2.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z'/%3E%3C/svg%3E") center / contain no-repeat;
                     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 2l1.8 5.2L17 9l-5.2 1.8L10 16l-1.8-5.2L3 9l5.2-1.8z'/%3E%3Cpath d='M18 13l.9 2.1L21 16l-2.1.9L18 19l-.9-2.1L15 16l2.1-.9z'/%3E%3Cpath d='M18 2.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z'/%3E%3C/svg%3E") center / contain no-repeat;
         }
-        .mcf-chat__cosmetics-toggle[aria-pressed="true"]::after { opacity: 1; }
-        .mcf-chat__cosmetics-toggle:not([aria-pressed="true"])::before {
+        button.mcf-chat__cosmetics-toggle[aria-pressed="true"]::after { opacity: 1; }
+        button.mcf-chat__cosmetics-toggle:not([aria-pressed="true"])::before {
             content: ''; position: absolute; left: 50%; top: 50%; width: 22px; height: 2px; border-radius: 1px;
             background: currentColor; opacity: 0.85; transform: translate(-50%, -50%) rotate(-45deg);
         }
         /* In colour (setting): green while on. */
-        html[data-mcfo-chatcos="1"] .mcf-chat__cosmetics-toggle[aria-pressed="true"] {
+        html[data-mcfo-chatcos="1"] button.mcf-chat__cosmetics-toggle[aria-pressed="true"] {
             background: #10291c !important; border-color: #3fae72 !important; color: #7dffb4 !important;
         }
-        .mcf-chat__cosmetics-toggle:disabled { opacity: 0.5; cursor: default; }
+        button.mcf-chat__cosmetics-toggle:disabled { opacity: 0.5; cursor: default; }
+        /* Since MCF v1.0.4 the control is a select of three modes (6.62.2). The frame .mcfo-cosmode
+           (made by cosModeWrap) has the button look and the symbol; the select lies invisible on top
+           and opens the game's own list. Full: sparkles; Static: the same, dimmed; Off: struck through. */
+        .mcfo-cosmode {
+            position: relative; display: inline-grid; place-items: center; box-sizing: border-box;
+            width: 30px; min-width: 30px; height: 30px; min-height: 30px; padding: 0;
+            border: 1px solid var(--mcf-ui-control-border, #355066); border-radius: 7px;
+            background: var(--mcf-ui-control, #111f2b); color: var(--mcf-ui-muted, #a9bfce);
+            cursor: pointer; transition: background 0.2s, border-color 0.2s, color 0.2s;
+        }
+        .mcfo-cosmode:focus-within { border-color: var(--mcf-ui-focus, #4d7693); color: var(--mcf-ui-text, #dff2ff); }
+        .mcfo-cosmode > select.mcf-chat__cosmetics-toggle {
+            position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important;
+            min-width: 0 !important; min-height: 0 !important; margin: 0 !important; opacity: 0 !important; cursor: pointer;
+        }
+        .mcfo-cosmode::after {
+            content: ''; width: 17px; height: 17px; background: currentColor; opacity: 1; pointer-events: none;
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 2l1.8 5.2L17 9l-5.2 1.8L10 16l-1.8-5.2L3 9l5.2-1.8z'/%3E%3Cpath d='M18 13l.9 2.1L21 16l-2.1.9L18 19l-.9-2.1L15 16l2.1-.9z'/%3E%3Cpath d='M18 2.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z'/%3E%3C/svg%3E") center / contain no-repeat;
+                    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 2l1.8 5.2L17 9l-5.2 1.8L10 16l-1.8-5.2L3 9l5.2-1.8z'/%3E%3Cpath d='M18 13l.9 2.1L21 16l-2.1.9L18 19l-.9-2.1L15 16l2.1-.9z'/%3E%3Cpath d='M18 2.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z'/%3E%3C/svg%3E") center / contain no-repeat;
+        }
+        .mcfo-cosmode[data-mode="static"]::after { opacity: 0.5; }
+        .mcfo-cosmode[data-mode="off"]::after { opacity: 0.5; }
+        .mcfo-cosmode[data-mode="off"]::before {
+            content: ''; position: absolute; left: 50%; top: 50%; width: 22px; height: 2px; border-radius: 1px; pointer-events: none;
+            background: currentColor; opacity: 0.85; transform: translate(-50%, -50%) rotate(-45deg);
+        }
+        /* In colour (setting): green while cosmetics show (Full or Static). */
+        html[data-mcfo-chatcos="1"] .mcfo-cosmode:not([data-mode="off"]) {
+            background: #10291c !important; border-color: #3fae72 !important; color: #7dffb4 !important;
+        }
+        .mcfo-cosmode[data-disabled] { opacity: 0.5; }
+        .mcfo-cosmode[data-disabled] > select { cursor: default; }
+        .mcf-chat[data-collapsed="true"] .mcfo-cosmode { display: none !important; }
 
         /* === THEMES (settings page; the engine is section 3b) ===
            Scoped to .mcfo-theme: generic button rules of the settings window would otherwise
@@ -5039,7 +5115,7 @@
             `${S} .mcfo-switch__input:checked + .mcfo-switch { background: ${track}; box-shadow: inset 0 0 0 1px ${edge}; }`,
             `${S} .mcfo-seg button[aria-pressed="true"] { background: ${pressed}; }`,
             `${S}[data-mcfo-chatcos="1"] .mcf-chat__cosmetics-toggle[aria-pressed="true"] { background: ${deep} !important; border-color: ${edge} !important; color: ${text} !important; }`,
-            `${S}[data-mcfo-chatcos="1"] .mcf-chat__cosmetics-toggle[aria-pressed="true"]::before { background-color: ${track}; }`,
+            `${S}[data-mcfo-chatcos="1"] .mcfo-cosmode:not([data-mode="off"]) { background: ${deep} !important; border-color: ${edge} !important; color: ${text} !important; }`,
             `${S} .mcfo-tsbanner__name { color: ${c(0.84, 0.15)}; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4), 0 0 26px ${c(0.55, 0.16)}, 0 4px 22px rgba(0, 0, 0, 0.75); }`,
             `${S} .mcfo-tsbanner__kicker { color: ${c(0.9, 0.06)}; }`,
             // Mentions of you (6.36) in the theme's accent instead of the fixed gold (6.51).
@@ -5318,7 +5394,7 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
     // it was one signal too many. Left out of every skin's :hover rule.
     const SKIN_HOVERLESS = ['.mcfo-signpost', '[data-role="diamonds-purchase-link"]'];
     const SKIN_BUTTONS = [
-        '.mcf-chat__send', '.mcf-chat__cosmetics-toggle', '.mcf-chat__collapse', '.mcfo-chatpop-btn', '.mcfo-tomato-btn', '.mcfo-animal-btn',
+        '.mcf-chat__send', '.mcf-chat__cosmetics-toggle', '.mcfo-cosmode', '.mcf-chat__collapse', '.mcfo-chatpop-btn', '.mcfo-tomato-btn', '.mcfo-animal-btn',
         '.mcfo-taskbar button', '.mcfo-win__head button', '[data-role="sound-utility-toggle"]',
         '.mcfo-rebellion', '.mcfo-rail-toggle', '.mcfo-unbid', '.mcfo-autobid',
         '[data-action="king-attack"]', '.mcfo-attack', '.mcfo-signpost',
@@ -5573,7 +5649,7 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
                 }
                 ${S} .mcf-chat__header :is(.mcf-chat__title, .mcf-chat__title strong, .mcf-chat__room) { color: #eaf2ff !important; }
                 ${S} .mcf-chat__title strong { font-family: ${GILL}; letter-spacing: 0.12em; text-transform: uppercase; }
-                ${S} :is(.mcf-chat__cosmetics-toggle, .mcf-chat__collapse) {
+                ${S} :is(.mcf-chat__cosmetics-toggle, .mcfo-cosmode, .mcf-chat__collapse) {
                     background: ${TD.dark} !important; border: 1px solid ${TD.trim} !important; color: #eaf2ff !important; border-radius: 2px !important;
                 }
                 ${S} .mcf-chat__body {
@@ -7445,7 +7521,7 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
                 ${S} .mcfo-autobid { background: ${saberBg('#c4ffbf')} !important; box-shadow: ${saberGlow('#3dff4e')} !important; color: #062a0a !important; }
                 /* Text buttons make room for the hilt; buttons that only carry a symbol are blade alone. */
                 ${S} :is(.mcf-chat__send, .mcfo-rebellion, .mcfo-unbid, .mcfo-autobid, .mcfo-rail-toggle, .mcfo-signpost, [data-role="diamonds-purchase-link"], [data-role="nav-region"] > :is(button, a)) { padding-left: 16px !important; }
-                ${S} :is(.mcf-chat__collapse, .mcf-chat__cosmetics-toggle, .mcfo-chatpop-btn, .mcfo-gear, .mcfo-drink--icon, .mcfo-win__head button, [data-role="sound-utility-toggle"]) {
+                ${S} :is(.mcf-chat__collapse, .mcf-chat__cosmetics-toggle, .mcfo-cosmode, .mcfo-chatpop-btn, .mcfo-gear, .mcfo-drink--icon, .mcfo-win__head button, [data-role="sound-utility-toggle"]) {
                     background: linear-gradient(180deg, #bfe6ff 0%, #ffffff 35% 65%, #bfe6ff 100%) !important; border-radius: 999px !important; }
                 ${fx(['full'], '.mcf-chat:not([data-collapsed="true"])')} { animation: mcfoHolo 9s steps(1) infinite; }
                 @keyframes mcfoHolo { 0%, 96% { opacity: 1; } 96.5% { opacity: 0.86; } 97% { opacity: 1; } 98% { opacity: 0.9; } 98.4% { opacity: 1; } }
@@ -12564,7 +12640,8 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
         // The cosmetics button shows only a symbol since 6.16.1; its words come back as the
         // tooltip, read at the moment the pointer arrives, so it always tells the current state.
         const cos = header && header.querySelector('.mcf-chat__cosmetics-toggle');
-        if (cos && !cos.dataset.mcfoTip) {
+        // Since MCF v1.0.4 it is a select of three modes; cosModeWrap (settings) keeps its tooltip.
+        if (cos && cos.tagName !== 'SELECT' && !cos.dataset.mcfoTip) {
             cos.dataset.mcfoTip = '1';
             cos.addEventListener('pointerenter', () => {
                 cos.title = cos.getAttribute('aria-pressed') === 'true' ? 'Chat cosmetics: on (click to turn off)' : 'Chat cosmetics: off (click to turn on)';
@@ -14015,12 +14092,16 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
     //
     // The version comes from the userscript manager (GM_info), so it cannot drift from @version;
     // the fallback is for managers without GM_info and has to be kept in step by hand.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.62.1';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.62.2';
     const HOWTO_KEY = '#howto', CHANGELOG_KEY = '#changelog', WHATSNEW_KEY = '#whatsnew';
     const WHATSNEW_SEEN = 'mcfo_whatsnew_seen';   // the version whose What's new was dismissed for good
 
     // Newest first. The first entry is what What's new shows after a fresh install.
     const CHANGELOG = [
+        { v: '6.62.2', date: '2026-11-24', items: [
+            'Chat cosmetics button fixed for the game update v1.0.4: the game now has three modes (Full, Static, Off) instead of on/off. The sparkles show the mode (bright = Full, dimmed = Static, struck through = Off); a click opens the game\'s own list to pick one.',
+            'Settings › Cosmetics: hiding all chat cosmetics sets that game menu to Off again and puts your previous mode back when you switch it off.',
+        ] },
         { v: '6.62.1', date: '2026-10-14', items: [
             'Settings › Notifications: with nothing to review, the Rewards line now says so instead of staying empty.',
         ] },

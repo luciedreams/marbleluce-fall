@@ -1,5 +1,9 @@
     // Newest first. The first entry is what What's new shows after a fresh install.
     const CHANGELOG = [
+        { v: '6.62.2', date: '2026-11-24', items: [
+            'Chat cosmetics button fixed for the game update v1.0.4: the game now has three modes (Full, Static, Off) instead of on/off. The sparkles show the mode (bright = Full, dimmed = Static, struck through = Off); a click opens the game\'s own list to pick one.',
+            'Settings › Cosmetics: hiding all chat cosmetics sets that game menu to Off again and puts your previous mode back when you switch it off.',
+        ] },
         { v: '6.62.1', date: '2026-10-14', items: [
             'Settings › Notifications: with nothing to review, the Rewards line now says so instead of staying empty.',
         ] },
