@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MarbleLuceFall
 // @namespace    http://tampermonkey.net/
-// @version      6.62.2
+// @version      6.63
 // @description  Layout overhaul for Marble Crownfall: 50+ colour themes, pages as windows over the game, autobid with risk protection and tile lists, unbid and extra ticket chips, quest alarm and euro prices in the shop, claim all dailies, new inventory and achievements pages, loadouts, adjustable reign read-outs with the toll on the tile, beverage bar, auto beverages on the throne, enhanced chat, hide any cosmetic, a music player with a movable bar, performance levels, how-to and what’s new.
 // @author       DreamingLucie
 // @match        *://*.marblecrownfall.com/*
@@ -1766,6 +1766,13 @@
     //   king     snapshot.kingCosmetics.wreath and .crest (king socket /king/ws and /api/king/snapshot;
     //            without a crest recipe the game keeps its plain celebration shield); the crown
     //            is the 3D overlay layer and is hidden by CSS, as the Maximum performance level does.
+    //   fonts    player fonts (6.63, MCF v1.0.4): other players' fonts come from
+    //            /api/inventory/public-font-styles (names, chat, bids, scores, run results, King tile,
+    //            profiles; playerFonts.js bindPublicPlayerFont), some chat lines carry them inline as
+    //            presentation.fontStyles, and one's own fonts for tile text and the site from
+    //            /api/inventory/font-styles?view=preferences. All three answer empty: every surface
+    //            keeps the game's normal font. The inventory's own font list is a different request
+    //            and stays untouched, so fonts can still be picked and previewed there.
     // Read straight from storage here: the settings (section 1) only exist once the page is there.
     // The bidding-indicator store (biddingIndicators/assignmentStore.js) keeps what it accepted for
     // the rest of a run, so marbles change with the next run on each lane; chat lines from the next
@@ -1789,6 +1796,7 @@
         for (const [g, parts] of Object.entries(COS_GROUPS))
             for (const p of parts) out[p] = !!(st.hideCosAll || st[COS_GROUP_KEYS[g]] || (p === 'indicator' ? bidMode(st) === 2 : st[COS_KEYS[p]]));
         out.indicatorSmall = !out.indicator && bidMode(st) === 1;
+        out.fonts = !!(st.hideCosAll || st.hideFonts);
         return out;
     }
     let cosHide = {};
@@ -1799,6 +1807,7 @@
         if (typeof txt !== 'string') return false;
         for (const [field, part] of Object.entries(COS_MARBLE_FIELDS)) if (cosHide[part] && txt.indexOf('"' + field + '"') !== -1) return true;
         if (cosChatParts() && txt.indexOf(CHAT_COS_SCHEMA) !== -1) return true;
+        if (cosHide.fonts && txt.indexOf('"fontStyles"') !== -1) return true;
         return !!(cosHide.wreath || cosHide.crest) && txt.indexOf('"kingCosmetics"') !== -1;
     }
     function chatCosStrip(v) {
@@ -1903,6 +1912,7 @@
             return o;
         }
         if (v && typeof v === 'object' && v.schema === CHAT_COS_SCHEMA) return chatCosStrip(v);
+        if (k === 'fontStyles' && cosHide.fonts) return undefined;
         return v;
     }
 
@@ -1926,7 +1936,8 @@
     }
 
     // Installed only once a switch is first turned on: until then this script leaves the page's
-    // fetch alone. Only the reply of /bid/place and the King snapshot are ever looked at.
+    // fetch alone. Only the reply of /bid/place and the King snapshot are ever looked at, and the
+    // two font requests (6.63) are answered empty without asking the server.
     let cosFetchWrapped = false;
     function wrapCosFetch() {
         if (cosFetchWrapped) return;
@@ -1934,9 +1945,15 @@
         try {
             const nativeFetch = pageWindow.fetch;
             pageWindow.fetch = function (input, init) {
-                const pending = nativeFetch.apply(this, arguments);
                 let url = '';
                 try { url = typeof input === 'string' ? input : String((input && input.url) || ''); } catch (e) {}
+                if (cosHide.fonts && (url.indexOf('/api/inventory/public-font-styles') !== -1
+                    || url.indexOf('/api/inventory/font-styles?view=preferences') !== -1)) {
+                    const empty = url.indexOf('public-font-styles') !== -1 ? '{"players":{}}' : '{}';
+                    return pageWindow.Promise.resolve(new pageWindow.Response(empty,
+                        { status: 200, headers: { 'Content-Type': 'application/json' } }));
+                }
+                const pending = nativeFetch.apply(this, arguments);
                 if (url.indexOf('/bid/place') === -1 && url.indexOf('/api/king/snapshot') === -1) return pending;
                 return pending.then(res => res.clone().text().then(txt => {
                     if (!cosConcerns(txt)) return res;
@@ -2175,6 +2192,10 @@
                 { key: 'hideCrown', def: false, label: 'Hide the crown', hint: 'No crown on the King tile.' },
                 { key: 'hideWreath', def: false, label: 'Hide the wreath', hint: 'No wreath around the King\'s picture. Takes hold with the next King update.' },
                 { key: 'hideCrest', def: false, label: 'Hide the Royal Crest', hint: 'The game\'s plain shield instead of the King\'s crest in a Royal Celebration. Takes hold with the next King update.' },
+            ]},
+            { title: 'Fonts', note: 'Takes hold after reloading the page.', items: [
+                { key: 'hideFonts', def: false, label: 'Hide player fonts',
+                  hint: 'Names, chat, bids, scores, run results, the King tile and profiles all in the game\'s normal font, for every player including you. The Misc. Shop and your inventory still show the fonts, so you can look at them and pick one.' },
             ]},
         ]},
         { title: 'Chat', blurb: 'Slim rail, pop-out window, growing message box and the enhanced chat.', items: [
@@ -2678,6 +2699,7 @@
         COS_COVER[COS_GROUP_KEYS[g]] = ['hideCosAll'];
         for (const p of parts) COS_COVER[COS_KEYS[p]] = ['hideCosAll', COS_GROUP_KEYS[g]];
     }
+    COS_COVER.hideFonts = ['hideCosAll'];   // fonts (6.63): a group of one switch, covered by the main one
     const cosCovered = key => (COS_COVER[key] || []).some(k => settings[k]);
     // The game's own chat cosmetics control (chat header) does "all chat cosmetics" better than any
     // filter: already drawn lines turn plain too. Since MCF v1.0.4 it is a <select> with three modes,
@@ -14092,12 +14114,15 @@ ${P} .inventoryUnlockClose:hover { opacity: 1; color: ${c(0.8, 0.12)}; }`;
     //
     // The version comes from the userscript manager (GM_info), so it cannot drift from @version;
     // the fallback is for managers without GM_info and has to be kept in step by hand.
-    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.62.2';
+    const SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info && GM_info.script && GM_info.script.version) || '6.63';
     const HOWTO_KEY = '#howto', CHANGELOG_KEY = '#changelog', WHATSNEW_KEY = '#whatsnew';
     const WHATSNEW_SEEN = 'mcfo_whatsnew_seen';   // the version whose What's new was dismissed for good
 
     // Newest first. The first entry is what What's new shows after a fresh install.
     const CHANGELOG = [
+        { v: '6.63', date: '2026-11-24', items: [
+            'Settings › Cosmetics › Fonts: "Hide player fonts" shows every name, chat line, bid, score, run result, the King tile and profiles in the game\'s normal font, for every player including you (game update v1.0.4 added player fonts). The shop and your inventory still show them. "Hide all cosmetics" covers it too.',
+        ] },
         { v: '6.62.2', date: '2026-11-24', items: [
             'Chat cosmetics button fixed for the game update v1.0.4: the game now has three modes (Full, Static, Off) instead of on/off. The sparkles show the mode (bright = Full, dimmed = Static, struck through = Off); a click opens the game\'s own list to pick one.',
             'Settings › Cosmetics: hiding all chat cosmetics sets that game menu to Off again and puts your previous mode back when you switch it off.',
